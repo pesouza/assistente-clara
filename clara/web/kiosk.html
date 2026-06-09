@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLARA Echo Show</title>
+<style>
+  :root{
+    --bg:#0a2460;
+    --ink:#ffffff;
+    --accent:#4fc3f7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100%;
+    background:var(--bg);
+    color:var(--ink);
+    font-family: system-ui, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+    overflow:hidden;
+    user-select:none;
+  }
+  .stage{
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:24px;
+  }
+  .clock{
+    font-size:clamp(64px, 14vw, 160px);
+    font-weight:200;
+    letter-spacing:2px;
+    opacity:.9;
+  }
+  .date{font-size:clamp(18px, 3vw, 28px);opacity:.7}
+  .face{width:min(70vw,520px);height:auto}
+  .status{font-size:14px;opacity:.6}
+  @media (max-width:540px){
+    .face{width:88vw}
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="clock" id="clock">00:00</div>
+    <div class="date" id="date">Carregando...</div>
+
+    <svg class="face" viewBox="0 0 520 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="g"/>
+          <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <g id="eyes">
+        <ellipse id="eye-left"  cx="175" cy="110" rx="36" ry="46" fill="#ffffff" filter="url(#glow)"/>
+        <ellipse id="eye-right" cx="345" cy="110" rx="36" ry="46" fill="#ffffff" filter="url(#glow)"/>
+        <g id="pupils">
+          <circle id="pupil-left"  cx="175" cy="110" r="12" fill="#0a2460"/>
+          <circle id="pupil-right" cx="345" cy="110" r="12" fill="#0a2460"/>
+        </g>
+      </g>
+
+      <ellipse id="mouth" cx="260" cy="195" rx="64" ry="28" fill="#ffffff" filter="url(#glow)"/>
+      <ellipse id="mouth-inner" cx="260" cy="195" rx="40" ry="10" fill="#0a2460"/>
+    </svg>
+
+    <div class="status" id="status">CLARA pronta</div>
+  </div>
+
+<script>
+  const clock=document.getElementById('clock');
+  const date=document.getElementById('date');
+  const status=document.getElementById('status');
+  const mouth=document.getElementById('mouth');
+  const mouthInner=document.getElementById('mouth-inner');
+  const pupilLeft=document.getElementById('pupil-left');
+  const pupilRight=document.getElementById('pupil-right');
+
+  function tick(){
+    const now=new Date();
+    clock.textContent=now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    date.textContent=now.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+  }
+  tick();
+  setInterval(tick,1000);
+
+  function setGaze(tx,ty){
+    pupilLeft.setAttribute('cx', 175+tx*10);
+    pupilLeft.setAttribute('cy', 110+ty*8);
+    pupilRight.setAttribute('cx', 345+tx*10);
+    pupilRight.setAttribute('cy', 110+ty*8);
+  }
+  function blink(){
+    document.getElementById('eye-left').setAttribute('ry', 6);
+    document.getElementById('eye-right').setAttribute('ry', 6);
+    setTimeout(()=>{
+      document.getElementById('eye-left').setAttribute('ry', 46);
+      document.getElementById('eye-right').setAttribute('ry', 46);
+    },120);
+  }
+
+  setInterval(()=>{
+    const x=(Math.random()*2-1);
+    const y=(Math.random()*1.6-0.8);
+    setGaze(x,y);
+  },2200);
+
+  setInterval(()=>{
+    if(Math.random()<0.35) blink();
+  }, 1800);
+
+  const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/face');
+  ws.onmessage=(ev)=>{
+    let m;
+    try{m=JSON.parse(ev.data)}
+    catch(e){return}
+    if(m.type==='gaze') setGaze(Number(m.payload?.x||0), Number(m.payload?.y||0));
+    if(m.type==='blink') blink();
+    if(m.type==='mouth_open'){
+      const v=Math.max(0,Math.min(1,Number(m.payload?.openness||0.5)));
+      mouth.setAttribute('ry', 10+v*30);
+      mouthInner.setAttribute('ry', 4+v*14);
+      status.textContent='Falando...';
+    }
+    if(m.type==='mouth_close'){
+      mouth.setAttribute('ry', 28);
+      mouthInner.setAttribute('ry', 10);
+      status.textContent='CLARA pronta';
+    }
+  };
+</script>
+</body>
+</html>
